@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Burnout Prevention Simulator</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 40px;
+  }
+  input {
+    margin: 6px 0;
+    padding: 6px;
+    width: 200px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 30px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+</style>
+</head>
+<body>
+
+<h2>Burnout Prevention Simulator</h2>
+
+<div>
+  <label>Daily Load (work, stress, obligations):</label><br>
+  <input id="load" type="number" value="60"><br>
+
+  <label>Daily Recovery (sleep, rest, hobbies):</label><br>
+  <input id="recovery" type="number" value="40"><br>
+
+  <label>Resilience (baseline capacity):</label><br>
+  <input id="resilience" type="number" value="50"><br>
+
+  <label>Days to Simulate:</label><br>
+  <input id="days" type="number" value="30"><br>
+
+  <button id="simulate">Run Simulation</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+// ---------------------------------------------
+// BURNOUT SIMULATION ENGINE
+// ---------------------------------------------
+function simulateBurnout() {
+  const load = Number(document.getElementById("load").value);
+  const recovery = Number(document.getElementById("recovery").value);
+  const resilience = Number(document.getElementById("resilience").value);
+  const days = Number(document.getElementById("days").value);
+
+  let energyDebt = 0;
+  const log = [];
+
+  for (let d = 1; d <= days; d++) {
+    const dailyDelta = load - recovery;
+    energyDebt += dailyDelta;
+
+    const burnoutRisk = Math.max(0, Math.min(100, (energyDebt / resilience) * 100));
+
+    log.push({
+      day: d,
+      energyDebt,
+      burnoutRisk
+    });
+  }
+
+  return log;
+}
+
+// ---------------------------------------------
+// RENDER RESULTS
+// ---------------------------------------------
+document.getElementById("simulate").addEventListener("click", () => {
+  const result = simulateBurnout();
+  const output = document.getElementById("output");
+
+  const last = result[result.length - 1];
+
+  let riskLabel = "Stable";
+  if (last.burnoutRisk > 25) riskLabel = "Strained";
+  if (last.burnoutRisk > 50) riskLabel = "Overloaded";
+  if (last.burnoutRisk > 75) riskLabel = "Burnout Trajectory";
+
+  output.innerHTML = `
+    <div><b>Final Energy Debt:</b> ${last.energyDebt.toFixed(2)}</div>
+    <div><b>Burnout Risk:</b> ${last.burnoutRisk.toFixed(2)}%</div>
+    <div><b>Status:</b> ${riskLabel}</div>
+  `;
+});
+</script>
+
+</body>
+</html>
