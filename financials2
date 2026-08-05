@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Financial Clarity Simulator</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 30px;
+    display: flex;
+    gap: 40px;
+  }
+  input, select, textarea {
+    margin: 4px 0;
+    padding: 6px;
+    width: 220px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+  }
+  button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 10px;
+    padding: 16px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    width: 420px;
+  }
+  #graph {
+    margin-top: 10px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  .section-title {
+    margin-top: 10px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <h2>Financial Clarity Simulator</h2>
+
+  <div class="section-title">Core Inputs</div>
+  <label>Monthly Income:</label><br>
+  <input id="income" type="number" value="3500"><br>
+
+  <label>Fixed Expenses (rent, utilities, etc.):</label><br>
+  <input id="fixed" type="number" value="2200"><br>
+
+  <label>Variable Expenses (food, misc):</label><br>
+  <input id="variable" type="number" value="600"><br>
+
+  <div class="section-title">Subscriptions (comma-separated: name:amount)</div>
+  <textarea id="subscriptions" rows="3">Netflix:15, Gym:40, GamePass:20</textarea><br>
+
+  <div class="section-title">Emergency Fund</div>
+  <label>Target Emergency Fund:</label><br>
+  <input id="emergencyTarget" type="number" value="5000"><br>
+  <label>Monthly Savings (toward emergency/investing):</label><br>
+  <input id="savings" type="number" value="200"><br>
+
+  <div class="section-title">Investing</div>
+  <label>Monthly Investing (from savings):</label><br>
+  <input id="investing" type="number" value="100"><br>
+  <label>Expected Annual Return (%):</label><br>
+  <input id="returnRate" type="number" value="5"><br>
+
+  <div class="section-title">Debts (one per line: name,amount,rate,minPayment)</div>
+  <textarea id="debts" rows="4">Card A,3000,19,75
+Card B,1500,15,50</textarea><br>
+
+  <label>Strategy:</label><br>
+  <select id="strategy">
+    <option value="snowball">Snowball (smallest balance first)</option>
+    <option value="avalanche">Avalanche (highest rate first)</option>
+  </select><br>
+
+  <div class="section-title">Scenarios</div>
+  <label>Extra Debt Payment:</label><br>
+  <input id="extraDebt" type="number" value="100"><br>
+  <label>Subscription Cut (amount freed):</label><br>
+  <input id="cutSubs" type="number" value="50"><br>
+
+  <button id="simulate">Run Simulation</button>
+</div>
+
+<div>
+  <div id="output"></div>
+  <canvas id="graph" width="420" height="220"></canvas>
+</div>
+
+<script>
+// -----------------------------
+// Parsing helpers
+// -----------------------------
+function parseSubscriptions(text) {
+  if (!text.trim()) return [];
+  return text.split(",").map(s => {
+    const [name, amount] = s.split(":").map(x => x.trim());
+    return { name, amount: Number(amount) || 0 };
+  });
+}
+
+function parseDebts(text) {
+  return text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [name, amount, rate, minPayment] = line.split(",").map(x => x.trim());
+      return {
+        name,
+        amount: Number(amount) || 0,
+        rate: (Number(rate) || 0) / 100,
+        minPayment: Number(minPayment) || 0
+      };
+    });
+}
+
+// -----------------------------
+// Debt ordering (snowball/avalanche)
+// -----------------------------
+function orderDebts(debts, strategy) {
+  const copy = debts.slice();
+  if (strategy === "snowball") {
+    copy.sort((a, b) => a.amount - b.amount);
+  } else {
+    copy.sort((a, b) => b.rate - a.rate);
+  }
+  return copy;
+}
+
+// -----------------------------
+// Simulation engine
+// -----------------------------
+function simulate() {
+  const income = Number(document.getElementById("income").value);
+  const fixed = Number(document.getElementById("fixed").value);
+  const variable = Number(document.getElementById("variable").value);
+  const subs = parseSubscriptions(document.getElementById("subscriptions").value);
+  const emergencyTarget = Number(document.getElementById("emergencyTarget").value);
+  const savingsMonthly = Number(document.getElementById("savings").value);
+  const investingMonthly = Number(document.getElementById("investing").value);
+  const returnRate = Number(document.getElementById("returnRate").value) / 100;
+  const debts = parseDebts(document.getElementById("debts").value);
+  const strategy = document.getElementById("strategy").value;
+  const extraDebt = Number(document.getElementById("extraDebt").value);
+  const cutSubs = Number(document.getElementById("cutSubs").value);
+
+  const totalSubs = subs.reduce((sum, s) => sum + s.amount, 0);
+  const baseExpenses = fixed + variable + totalSubs;
+
+  let emergencyFund = 0;
+  let investingBalance = 0;
+  let month = 0;
+
+  const orderedDebts = orderDebts(debts, strategy);
+
+  const months = 240;
+  const log = [];
+
+  while (month < months) {
+    month++;
+
+    // Freed from subscription cuts
+    const freedFromSubs = cutSubs;
+    const net = income - baseExpenses + freedFromSubs;
+
+    // Debt interest + payments
+    let remainingExtra = extraDebt;
+    let totalDebt = 0;
+
+    for (const d of orderedDebts) {
+      if (d.amount <= 0) continue;
+
+      // Interest
+      d.amount += d.amount * (d.rate / 12);
+
+      // Base payment
+      let payment = d.minPayment;
+
+      // Extra payment allocation
+      if (remainingExtra > 0) {
+        const extra = Math.min(remainingExtra, d.amount - payment);
+        payment += extra;
+        remainingExtra -= extra;
+      }
+
+      d.amount -= payment;
+      if (d.amount < 0) d.amount = 0;
+
+      totalDebt += d.amount;
+    }
+
+    // Emergency fund & investing
+    let savings = savingsMonthly;
+    if (net < 0) {
+      // Negative cash flow: savings reduced
+      savings = Math.max(0, savings + net);
+    }
+
+    // First fill emergency fund
+    if (emergencyFund < emergencyTarget) {
+      const toEmergency = Math.min(savings, emergencyTarget - emergencyFund);
+      emergencyFund += toEmergency;
+      savings -= toEmergency;
+    }
+
+    // Then investing
+    const toInvest = Math.min(savings, investingMonthly);
+    investingBalance += toInvest;
+    // Investment growth
+    investingBalance += investingBalance * (returnRate / 12);
+
+    log.push({
+      month,
+      net,
+      totalDebt,
+      emergencyFund,
+      investingBalance
+    });
+
+    if (totalDebt <= 0 && emergencyFund >= emergencyTarget && month > 12) {
+      break;
+    }
+  }
+
+  return log;
+}
+
+// -----------------------------
+// Render summary
+// -----------------------------
+function renderSummary(log) {
+  const output = document.getElementById("output");
+  const last = log[log.length - 1];
+
+  const debtFreeMonth = log.find(entry => entry.totalDebt <= 0)?.month || "Not within period";
+  const emergencyReachedMonth = log.find(entry => entry.emergencyFund >= Number(document.getElementById("emergencyTarget").value))?.month || "Not within period";
+
+  output.innerHTML = `
+    <div><b>Debt-Free Month:</b> ${debtFreeMonth}</div>
+    <div><b>Emergency Fund Reached:</b> ${emergencyReachedMonth}</div>
+    <div><b>Final Emergency Fund:</b> $${last.emergencyFund.toFixed(2)}</div>
+    <div><b>Final Investing Balance:</b> $${last.investingBalance.toFixed(2)}</div>
+    <div><b>Final Total Debt:</b> $${last.totalDebt.toFixed(2)}</div>
+    <div><b>Last Net Monthly Cash Flow (approx):</b> $${last.net.toFixed(2)}</div>
+  `;
+}
+
+// -----------------------------
+// Simple graph visualization
+// -----------------------------
+function renderGraph(log) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const maxDebt = Math.max(...log.map(l => l.totalDebt));
+  const maxSavings = Math.max(...log.map(l => l.emergencyFund + l.investingBalance));
+  const maxY = Math.max(maxDebt, maxSavings, 1);
+
+  function xForMonth(m) {
+    return (m / log.length) * (canvas.width - 20) + 10;
+  }
+  function yForValue(v) {
+    return canvas.height - 10 - (v / maxY) * (canvas.height - 20);
+  }
+
+  // Debt line (red)
+  ctx.strokeStyle = "#ff6666";
+  ctx.beginPath();
+  log.forEach((entry, i) => {
+    const x = xForMonth(entry.month);
+    const y = yForValue(entry.totalDebt);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Savings+Investing line (cyan)
+  ctx.strokeStyle = "#66ffff";
+  ctx.beginPath();
+  log.forEach((entry, i) => {
+    const x = xForMonth(entry.month);
+    const y = yForValue(entry.emergencyFund + entry.investingBalance);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Legend
+  ctx.fillStyle = "#e0e0ff";
+  ctx.fillText("Debt (red)", 10, 15);
+  ctx.fillText("Savings+Investing (cyan)", 100, 15);
+}
+
+// -----------------------------
+// Wire up
+// -----------------------------
+document.getElementById("simulate").addEventListener("click", () => {
+  const log = simulate();
+  renderSummary(log);
+  renderGraph(log);
+});
+</script>
+
+</body>
+</html>
