@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Energy Map — Personal Clarity Engine</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 40px;
+  }
+  input {
+    margin: 6px 0;
+    padding: 6px;
+    width: 240px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 30px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  canvas {
+    margin-top: 30px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid #33334a;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<h2>My Energy Map — Personal Clarity Engine</h2>
+
+<!-- CORE LOAD / RECOVERY -->
+<h3>Core Daily Pattern</h3>
+<div>
+  <label>Work Hours per Day:</label><br>
+  <input id="workHours" type="number" value="8"><br>
+
+  <label>Sleep Hours per Night:</label><br>
+  <input id="sleepHours" type="number" value="7"><br>
+
+  <label>Caregiving / Emotional Labor (hours/day):</label><br>
+  <input id="careHours" type="number" value="2"><br>
+
+  <label>Commute (hours/day):</label><br>
+  <input id="commuteHours" type="number" value="1"><br>
+
+  <label>Screen Time (non‑work, hours/day):</label><br>
+  <input id="screenHours" type="number" value="3"><br>
+
+  <label>Social Support (1–10):</label><br>
+  <input id="socialSupport" type="number" value="5"><br>
+
+  <label>Days to Simulate:</label><br>
+  <input id="days" type="number" value="60"><br>
+</div>
+
+<hr>
+
+<!-- HABITS -->
+<h3>Habits & Supports</h3>
+<div>
+  <label>Intentional Rest (hours/day):</label><br>
+  <input id="restHours" type="number" value="0.5"><br>
+
+  <label>Movement / Exercise (minutes/day):</label><br>
+  <input id="exerciseMinutes" type="number" value="20"><br>
+
+  <label>Mindfulness / Reflection (minutes/day):</label><br>
+  <input id="mindMinutes" type="number" value="10"><br>
+</div>
+
+<hr>
+
+<button id="simulate">Run My Energy Map</button>
+
+<div id="output"></div>
+
+<canvas id="graph" width="800" height="300"></canvas>
+
+<script>
+// -----------------------------
+// SCORING HELPERS
+// -----------------------------
+function computeDailyLoad(work, care, commute, screen) {
+  return work * 10 + care * 8 + commute * 5 + screen * 4;
+}
+
+function computeDailyRecovery(sleep, rest, exerciseMin, mindMin, socialSupport) {
+  let recovery = 0;
+  recovery += sleep * 8;
+  recovery += rest * 10;
+  recovery += exerciseMin * 0.3;
+  recovery += mindMin * 0.4;
+  recovery += socialSupport * 5;
+  return recovery;
+}
+
+function simulateEnergy() {
+  const workHours = Number(document.getElementById("workHours").value);
+  const sleepHours = Number(document.getElementById("sleepHours").value);
+  const careHours = Number(document.getElementById("careHours").value);
+  const commuteHours = Number(document.getElementById("commuteHours").value);
+  const screenHours = Number(document.getElementById("screenHours").value);
+  const socialSupport = Number(document.getElementById("socialSupport").value);
+  const days = Number(document.getElementById("days").value);
+
+  const restHours = Number(document.getElementById("restHours").value);
+  const exerciseMinutes = Number(document.getElementById("exerciseMinutes").value);
+  const mindMinutes = Number(document.getElementById("mindMinutes").value);
+
+  let energyDebt = 0;
+  const log = [];
+
+  for (let d = 1; d <= days; d++) {
+    const load = computeDailyLoad(workHours, careHours, commuteHours, screenHours);
+    const recovery = computeDailyRecovery(sleepHours, restHours, exerciseMinutes, mindMinutes, socialSupport);
+
+    const delta = load - recovery;
+    energyDebt += delta;
+
+    const burnoutRisk = Math.max(0, Math.min(100, (energyDebt / 500) * 100));
+
+    log.push({
+      day: d,
+      energyDebt,
+      burnoutRisk,
+      load,
+      recovery
+    });
+  }
+
+  return log;
+}
+
+// -----------------------------
+// GRAPH
+// -----------------------------
+function drawGraph(data) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "#8888ff";
+  ctx.beginPath();
+
+  data.forEach((point, i) => {
+    const x = (i / data.length) * canvas.width;
+    const y = canvas.height - (point.burnoutRisk / 100) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+
+  ctx.stroke();
+}
+
+// -----------------------------
+// INSIGHTS: DRAINS & SUPPORTS
+// -----------------------------
+function identifyDrainsAndSupports(work, sleep, care, commute, screen, socialSupport, rest, exerciseMin, mindMin) {
+  const drains = [];
+  const supports = [];
+
+  if (work > 9) drains.push("High work hours");
+  if (care > 3) drains.push("Heavy caregiving / emotional labor");
+  if (commute > 1.5) drains.push("Long commute");
+  if (screen > 4) drains.push("High non‑work screen time");
+
+  if (sleep < 7) drains.push("Insufficient sleep");
+  else supports.push("Decent sleep");
+
+  if (socialSupport <= 4) drains.push("Low social support");
+  else supports.push("Meaningful social support");
+
+  if (rest >= 0.5) supports.push("Intentional rest");
+  if (exerciseMin >= 20) supports.push("Regular movement");
+  if (mindMin >= 10) supports.push("Mindfulness / reflection");
+
+  return { drains, supports };
+}
+
+// -----------------------------
+// NEXT STEP ENGINE
+// -----------------------------
+function generateNextSteps(finalRisk, drains, supports) {
+  let stop = "Stop: taking on extra obligations this week.";
+  let start = "Start: 30 minutes of non‑screen rest daily.";
+  let tell = "Tell: one person you trust that you’re close to burnout.";
+
+  if (finalRisk < 25) {
+    stop = "Stop: assuming you must stay at this pace forever.";
+    start = "Start: protecting the habits that are already helping you.";
+    tell = "Tell: someone that you’re stable but still human.";
+  } else if (finalRisk < 50) {
+    stop = "Stop: saying yes to every request.";
+    start = "Start: adding 30–60 minutes of sleep or rest.";
+    tell = "Tell: a friend or partner that you’re strained.";
+  } else if (finalRisk < 75) {
+    stop = "Stop: extending work hours beyond your normal day.";
+    start = "Start: one concrete boundary (time, availability, or tasks).";
+    tell = "Tell: someone who can help you adjust your load.";
+  } else {
+    stop = "Stop: treating this as sustainable. It isn’t.";
+    start = "Start: reducing work or obligations immediately, even a little.";
+    tell = "Tell: someone with real power over your workload.";
+  }
+
+  return { stop, start, tell };
+}
+
+// -----------------------------
+// MAIN HANDLER
+// -----------------------------
+document.getElementById("simulate").addEventListener("click", () => {
+  const workHours = Number(document.getElementById("workHours").value);
+  const sleepHours = Number(document.getElementById("sleepHours").value);
+  const careHours = Number(document.getElementById("careHours").value);
+  const commuteHours = Number(document.getElementById("commuteHours").value);
+  const screenHours = Number(document.getElementById("screenHours").value);
+  const socialSupport = Number(document.getElementById("socialSupport").value);
+
+  const restHours = Number(document.getElementById("restHours").value);
+  const exerciseMinutes = Number(document.getElementById("exerciseMinutes").value);
+  const mindMinutes = Number(document.getElementById("mindMinutes").value);
+
+  const result = simulateEnergy();
+  const output = document.getElementById("output");
+  const last = result[result.length - 1];
+
+  const { drains, supports } = identifyDrainsAndSupports(
+    workHours, sleepHours, careHours, commuteHours, screenHours,
+    socialSupport, restHours, exerciseMinutes, mindMinutes
+  );
+
+  const steps = generateNextSteps(last.burnoutRisk, drains, supports);
+
+  output.innerHTML = `
+    <div><b>Final Energy Debt:</b> ${last.energyDebt.toFixed(2)}</div>
+    <div><b>Burnout Risk:</b> ${last.burnoutRisk.toFixed(2)}%</div>
+    <div><b>Top Drains:</b> ${drains.length ? drains.join(", ") : "None detected at high levels."}</div>
+    <div><b>Top Supports:</b> ${supports.length ? supports.join(", ") : "Few supports detected — consider adding some."}</div>
+    <hr>
+    <div><b>${steps.stop}</b></div>
+    <div><b>${steps.start}</b></div>
+    <div><b>${steps.tell}</b></div>
+  `;
+
+  drawGraph(result);
+});
+</script>
+
+</body>
+</html>
