@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>City Stress Map — Community Clarity Engine</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 40px;
+  }
+  input {
+    margin: 6px 0;
+    padding: 6px;
+    width: 240px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 30px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  canvas {
+    margin-top: 30px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid #33334a;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<h2>City Stress Map — Community Clarity Engine</h2>
+
+<!-- BASE DEMAND / CAPACITY -->
+<h3>Daily Demand & Capacity</h3>
+<div>
+  <label>Food Demand (meals/day):</label><br>
+  <input id="foodDemand" type="number" value="150"><br>
+
+  <label>Food Capacity (meals/day):</label><br>
+  <input id="foodCapacity" type="number" value="120"><br>
+
+  <label>Shelter Demand (beds/night):</label><br>
+  <input id="shelterDemand" type="number" value="80"><br>
+
+  <label>Shelter Capacity (beds/night):</label><br>
+  <input id="shelterCapacity" type="number" value="60"><br>
+
+  <label>Transport Demand (rides/day):</label><br>
+  <input id="transportDemand" type="number" value="40"><br>
+
+  <label>Transport Capacity (rides/day):</label><br>
+  <input id="transportCapacity" type="number" value="30"><br>
+
+  <label>Days to Simulate:</label><br>
+  <input id="days" type="number" value="30"><br>
+</div>
+
+<hr>
+
+<!-- WEEKLY PATTERNS -->
+<h3>Weekly Demand Patterns</h3>
+<div>
+  <label>Weekend Shelter Demand Increase (%):</label><br>
+  <input id="weekendShelterDemand" type="number" value="20"><br>
+
+  <label>Midweek Food Demand Increase (%):</label><br>
+  <input id="midweekFoodDemand" type="number" value="10"><br>
+</div>
+
+<hr>
+
+<!-- VOLUNTEERS -->
+<h3>Volunteer Availability</h3>
+<div>
+  <label>Volunteers Available (per day):</label><br>
+  <input id="volunteers" type="number" value="20"><br>
+
+  <label>Volunteers Needed (per day):</label><br>
+  <input id="volunteersNeeded" type="number" value="25"><br>
+</div>
+
+<hr>
+
+<!-- SURGE EVENTS -->
+<h3>Emergency Surge Events</h3>
+<div>
+  <label>Surge Day (0 = none):</label><br>
+  <input id="surgeDay" type="number" value="10"><br>
+
+  <label>Surge Demand Increase (%):</label><br>
+  <input id="surgeDemandIncrease" type="number" value="50"><br>
+</div>
+
+<hr>
+
+<!-- SCENARIO -->
+<h3>Improved Scenario</h3>
+<div>
+  <label>Capacity Increase (%):</label><br>
+  <input id="scenarioCapacityIncrease" type="number" value="20"><br>
+
+  <label>Demand Reduction (%):</label><br>
+  <input id="scenarioDemandReduction" type="number" value="10"><br>
+</div>
+
+<button id="simulate">Run City Stress Map</button>
+
+<div id="output"></div>
+
+<canvas id="graph" width="800" height="300"></canvas>
+
+<script>
+// -----------------------------
+// WEEKLY PATTERNS
+// -----------------------------
+function applyWeeklyPatterns(day, foodDemand, shelterDemand, weekendShelterDemand, midweekFoodDemand) {
+  const dayOfWeek = day % 7;
+
+  if (dayOfWeek >= 2 && dayOfWeek <= 4) {
+    foodDemand += foodDemand * (midweekFoodDemand / 100);
+  }
+
+  if (dayOfWeek === 6 || dayOfWeek === 0) {
+    shelterDemand += shelterDemand * (weekendShelterDemand / 100);
+  }
+
+  return { foodDemand, shelterDemand };
+}
+
+// -----------------------------
+// SURGE EVENTS
+// -----------------------------
+function applySurge(day, surgeDay, surgeDemandIncrease, foodDemand, shelterDemand, transportDemand) {
+  if (surgeDay > 0 && day === surgeDay) {
+    const factor = surgeDemandIncrease / 100;
+    foodDemand += foodDemand * factor;
+    shelterDemand += shelterDemand * factor;
+    transportDemand += transportDemand * factor;
+  }
+  return { foodDemand, shelterDemand, transportDemand };
+}
+
+// -----------------------------
+// VOLUNTEER IMPACT
+// -----------------------------
+function applyVolunteerImpact(volunteers, volunteersNeeded, foodCapacity, shelterCapacity, transportCapacity) {
+  if (volunteers < volunteersNeeded) {
+    const shortageRatio = (volunteersNeeded - volunteers) / volunteersNeeded;
+    const reductionFactor = 1 - Math.min(0.5, shortageRatio);
+    foodCapacity *= reductionFactor;
+    shelterCapacity *= reductionFactor;
+    transportCapacity *= reductionFactor;
+  }
+  return { foodCapacity, shelterCapacity, transportCapacity };
+}
+
+// -----------------------------
+// SCENARIO ENGINE
+// -----------------------------
+function applyScenario(foodCapacity, shelterCapacity, transportCapacity,
+                       foodDemand, shelterDemand, transportDemand,
+                       scenarioCapacityIncrease, scenarioDemandReduction) {
+  const capFactor = 1 + scenarioCapacityIncrease / 100;
+  const demFactor = 1 - scenarioDemandReduction / 100;
+
+  return {
+    foodCapacity: foodCapacity * capFactor,
+    shelterCapacity: shelterCapacity * capFactor,
+    transportCapacity: transportCapacity * capFactor,
+    foodDemand: foodDemand * demFactor,
+    shelterDemand: shelterDemand * demFactor,
+    transportDemand: transportDemand * demFactor
+  };
+}
+
+// -----------------------------
+// MAIN COMMUNITY SIMULATION
+// -----------------------------
+function simulateCommunity() {
+  const baseFoodDemand = Number(document.getElementById("foodDemand").value);
+  const baseFoodCapacity = Number(document.getElementById("foodCapacity").value);
+  const baseShelterDemand = Number(document.getElementById("shelterDemand").value);
+  const baseShelterCapacity = Number(document.getElementById("shelterCapacity").value);
+  const baseTransportDemand = Number(document.getElementById("transportDemand").value);
+  const baseTransportCapacity = Number(document.getElementById("transportCapacity").value);
+  const days = Number(document.getElementById("days").value);
+
+  const weekendShelterDemand = Number(document.getElementById("weekendShelterDemand").value);
+  const midweekFoodDemand = Number(document.getElementById("midweekFoodDemand").value);
+
+  const volunteers = Number(document.getElementById("volunteers").value);
+  const volunteersNeeded = Number(document.getElementById("volunteersNeeded").value);
+
+  const surgeDay = Number(document.getElementById("surgeDay").value);
+  const surgeDemandIncrease = Number(document.getElementById("surgeDemandIncrease").value);
+
+  const scenarioCapacityIncrease = Number(document.getElementById("scenarioCapacityIncrease").value);
+  const scenarioDemandReduction = Number(document.getElementById("scenarioDemandReduction").value);
+
+  let totalShortageBase = 0;
+  let totalShortageScenario = 0;
+
+  const log = [];
+
+  for (let d = 1; d <= days; d++) {
+    let foodDemand = baseFoodDemand;
+    let shelterDemand = baseShelterDemand;
+    let transportDemand = baseTransportDemand;
+
+    let foodCapacity = baseFoodCapacity;
+    let shelterCapacity = baseShelterCapacity;
+    let transportCapacity = baseTransportCapacity;
+
+    ({ foodDemand, shelterDemand } =
+      applyWeeklyPatterns(d, foodDemand, shelterDemand, weekendShelterDemand, midweekFoodDemand));
+
+    ({ foodDemand, shelterDemand, transportDemand } =
+      applySurge(d, surgeDay, surgeDemandIncrease, foodDemand, shelterDemand, transportDemand));
+
+    ({ foodCapacity, shelterCapacity, transportCapacity } =
+      applyVolunteerImpact(volunteers, volunteersNeeded, foodCapacity, shelterCapacity, transportCapacity));
+
+    const foodShortageBase = Math.max(0, foodDemand - foodCapacity);
+    const shelterShortageBase = Math.max(0, shelterDemand - shelterCapacity);
+    const transportShortageBase = Math.max(0, transportDemand - transportCapacity);
+
+    const dailyShortageBase = foodShortageBase + shelterShortageBase + transportShortageBase;
+    totalShortageBase += dailyShortageBase;
+
+    const scenario = applyScenario(
+      foodCapacity, shelterCapacity, transportCapacity,
+      foodDemand, shelterDemand, transportDemand,
+      scenarioCapacityIncrease, scenarioDemandReduction
+    );
+
+    const foodShortageScenario = Math.max(0, scenario.foodDemand - scenario.foodCapacity);
+    const shelterShortageScenario = Math.max(0, scenario.shelterDemand - scenario.shelterCapacity);
+    const transportShortageScenario = Math.max(0, scenario.transportDemand - scenario.transportCapacity);
+
+    const dailyShortageScenario = foodShortageScenario + shelterShortageScenario + transportShortageScenario;
+    totalShortageScenario += dailyShortageScenario;
+
+    const baseCapSum = baseFoodCapacity + baseShelterCapacity + baseTransportCapacity;
+    const overloadRiskBase = Math.min(100, (totalShortageBase / (baseCapSum * 5)) * 100);
+    const overloadRiskScenario = Math.min(100, (totalShortageScenario / (baseCapSum * 5)) * 100);
+
+    const bottlenecks = [];
+    if (foodShortageBase > shelterShortageBase && foodShortageBase > transportShortageBase) bottlenecks.push("Food");
+    else if (shelterShortageBase > foodShortageBase && shelterShortageBase > transportShortageBase) bottlenecks.push("Shelter");
+    else if (transportShortageBase > foodShortageBase && transportShortageBase > shelterShortageBase) bottlenecks.push("Transport");
+
+    log.push({
+      day: d,
+      totalShortageBase,
+      totalShortageScenario,
+      overloadRiskBase,
+      overloadRiskScenario,
+      bottlenecks
+    });
+  }
+
+  return log;
+}
+
+// -----------------------------
+// OPTIMIZER SUGGESTION
+// -----------------------------
+function generateOptimizerSuggestion(last) {
+  if (last.totalShortageScenario < last.totalShortageBase * 0.5) {
+    return "Improved scenario cuts shortages by more than half. Prioritize capacity increases and demand reduction strategies.";
+  }
+  if (last.totalShortageScenario < last.totalShortageBase) {
+    return "Improved scenario reduces shortages. Focus on scaling food and shelter capacity and managing peak demand.";
+  }
+  return "Improved scenario does not significantly reduce shortages. Reassess volunteer levels, surge planning, and base capacity.";
+}
+
+// -----------------------------
+// GRAPH (BASE vs SCENARIO)
+// -----------------------------
+function drawGraph(data) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "#8888ff";
+  ctx.beginPath();
+  data.forEach((point, i) => {
+    const x = (i / data.length) * canvas.width;
+    const y = canvas.height - (point.overloadRiskBase / 100) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.strokeStyle = "#88ff88";
+  ctx.beginPath();
+  data.forEach((point, i) => {
+    const x = (i / data.length) * canvas.width;
+    const y = canvas.height - (point.overloadRiskScenario / 100) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+// -----------------------------
+// MAIN HANDLER
+// -----------------------------
+document.getElementById("simulate").addEventListener("click", () => {
+  const result = simulateCommunity();
+  const output = document.getElementById("output");
+  const last = result[result.length - 1];
+
+  let statusBase = "Stable";
+  if (last.overloadRiskBase > 25) statusBase = "Strained";
+  if (last.overloadRiskBase > 50) statusBase = "Overloaded";
+  if (last.overloadRiskBase > 75) statusBase = "Critical";
+
+  let statusScenario = "Stable";
+  if (last.overloadRiskScenario > 25) statusScenario = "Strained";
+  if (last.overloadRiskScenario > 50) statusScenario = "Overloaded";
+  if (last.overloadRiskScenario > 75) statusScenario = "Critical";
+
+  const suggestion = generateOptimizerSuggestion(last);
+  const bottleneckText = last.bottlenecks.length
+    ? last.bottlenecks.join(", ")
+    : "No single dominant bottleneck detected.";
+
+  output.innerHTML = `
+    <div><b>Total Shortage (Base):</b> ${last.totalShortageBase.toFixed(2)}</div>
+    <div><b>Total Shortage (Scenario):</b> ${last.totalShortageScenario.toFixed(2)}</div>
+    <div><b>Overload Risk (Base):</b> ${last.overloadRiskBase.toFixed(2)}% (${statusBase})</div>
+    <div><b>Overload Risk (Scenario):</b> ${last.overloadRiskScenario.toFixed(2)}% (${statusScenario})</div>
+    <div><b>Primary Bottlenecks (Base):</b> ${bottleneckText}</div>
+    <hr>
+    <div><b>Suggested Focus:</b> ${suggestion}</div>
+  `;
+
+  drawGraph(result);
+});
+</script>
+
+</body>
+</html>
