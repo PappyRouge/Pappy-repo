@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weekly Rhythm — Operating Code</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 40px;
+  }
+  .day {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  h2, h3 {
+    color: #e0e0ff;
+  }
+  button {
+    margin-top: 10px;
+    padding: 10px 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #log {
+    margin-top: 40px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    min-height: 150px;
+  }
+</style>
+</head>
+<body>
+
+<h2>Weekly Operating Code Rhythm</h2>
+<p>Your identity, lived through structure.</p>
+
+<div class="day">
+  <h3>Monday — Alignment Reset</h3>
+  <p>Review identity, set priorities, clear misalignment.</p>
+  <button onclick="mark('Monday', 'Alignment Reset')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Tuesday — Systems Building</h3>
+  <p>Fix problems at the structural level.</p>
+  <button onclick="mark('Tuesday', 'Systems Building')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Wednesday — Precision Day</h3>
+  <p>One leveraged action, one precise message, one deliberate silence.</p>
+  <button onclick="mark('Wednesday', 'Precision Day')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Thursday — Stewardship Day</h3>
+  <p>Strengthen systems around you without self-sacrifice.</p>
+  <button onclick="mark('Thursday', 'Stewardship Day')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Friday — Contribution Calibration</h3>
+  <p>Check energy debt and decide how much you can give.</p>
+  <button onclick="mark('Friday', 'Contribution Calibration')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Saturday — Void-Born Stillness</h3>
+  <p>Reset clarity through silence and sovereignty.</p>
+  <button onclick="mark('Saturday', 'Void-Born Stillness')">Mark Complete</button>
+</div>
+
+<div class="day">
+  <h3>Sunday — Legacy Review</h3>
+  <p>Zoom out, assess alignment, refine next week.</p>
+  <button onclick="mark('Sunday', 'Legacy Review')">Mark Complete</button>
+</div>
+
+<h3>Weekly Log</h3>
+<div id="log"></div>
+
+<script>
+function mark(day, action) {
+  const log = document.getElementById("log");
+  const entry = document.createElement("div");
+  entry.textContent = `${new Date().toLocaleString()} — ${day}: ${action} completed.`;
+  log.appendChild(entry);
+}
+</script>
+
+</body>
+</html>
