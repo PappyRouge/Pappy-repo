@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Regional Stress Map — Collective Clarity Engine</title>
+<style>
+  body {
+    background: #0a0a0f;
+    color: #e0e0ff;
+    font-family: monospace;
+    padding: 40px;
+  }
+  textarea {
+    width: 100%;
+    height: 180px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+    color: #e0e0ff;
+    cursor: pointer;
+  }
+  #output {
+    margin-top: 30px;
+    padding: 20px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  canvas {
+    margin-top: 30px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid #33334a;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<h2>Regional Stress Map — Collective Clarity Engine</h2>
+
+<p>Paste community metrics below as JSON. Example is pre‑filled.</p>
+
+<textarea id="communityData">
+[
+  {
+    "name": "Northside",
+    "foodShortage": 120,
+    "shelterShortage": 80,
+    "transportShortage": 40,
+    "volunteerGap": 10
+  },
+  {
+    "name": "Downtown",
+    "foodShortage": 60,
+    "shelterShortage": 120,
+    "transportShortage": 20,
+    "volunteerGap": 5
+  },
+  {
+    "name": "Riverside",
+    "foodShortage": 30,
+    "shelterShortage": 40,
+    "transportShortage": 10,
+    "volunteerGap": 2
+  }
+]
+</textarea>
+
+<button id="analyze">Analyze Region</button>
+
+<div id="output"></div>
+
+<canvas id="graph" width="800" height="300"></canvas>
+
+<script>
+// -----------------------------
+// STRESS SCORING
+// -----------------------------
+function scoreCommunity(c) {
+  const totalShortage = c.foodShortage + c.shelterShortage + c.transportShortage;
+  const stressScore = totalShortage + c.volunteerGap * 10;
+
+  let level = "Stable";
+  if (stressScore > 150) level = "Strained";
+  if (stressScore > 300) level = "Overloaded";
+  if (stressScore > 500) level = "Critical";
+
+  return { totalShortage, stressScore, level };
+}
+
+function analyzeRegion(communities) {
+  const results = communities.map(c => {
+    const scored = scoreCommunity(c);
+    return { ...c, ...scored };
+  });
+
+  const totalStress = results.reduce((sum, r) => sum + r.stressScore, 0);
+  const avgStress = results.length ? totalStress / results.length : 0;
+
+  let regionLevel = "Stable";
+  if (avgStress > 150) regionLevel = "Strained";
+  if (avgStress > 300) regionLevel = "Overloaded";
+  if (avgStress > 500) regionLevel = "Critical";
+
+  const sortedByStress = [...results].sort((a, b) => b.stressScore - a.stressScore);
+  const topCritical = sortedByStress.filter(r => r.level === "Critical").slice(0, 3);
+  const topStrained = sortedByStress.filter(r => r.level === "Strained").slice(0, 3);
+
+  return {
+    results,
+    totalStress,
+    avgStress,
+    regionLevel,
+    topCritical,
+    topStrained
+  };
+}
+
+// -----------------------------
+// SUGGESTIONS
+// -----------------------------
+function generateRegionalSuggestions(region) {
+  const { regionLevel, topCritical, topStrained } = region;
+
+  if (regionLevel === "Stable") {
+    return "Region is stable. Focus on maintaining supports and monitoring for emerging strain.";
+  }
+  if (regionLevel === "Strained") {
+    return "Region is strained. Prioritize support for the most stressed communities and prevent escalation.";
+  }
+  if (regionLevel === "Overloaded") {
+    return "Region is overloaded. Coordinate cross‑community support, volunteers, and emergency resources.";
+  }
+  return "Region is in a critical state. Immediate coordinated intervention is needed in the top critical communities.";
+}
+
+// -----------------------------
+// GRAPH (COMMUNITY STRESS)
+// -----------------------------
+function drawGraph(results) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const maxStress = Math.max(...results.map(r => r.stressScore), 1);
+
+  ctx.strokeStyle = "#8888ff";
+  ctx.beginPath();
+
+  results.forEach((r, i) => {
+    const x = (i / (results.length - 1 || 1)) * canvas.width;
+    const y = canvas.height - (r.stressScore / maxStress) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+
+  ctx.stroke();
+}
+
+// -----------------------------
+// MAIN HANDLER
+// -----------------------------
+document.getElementById("analyze").addEventListener("click", () => {
+  const raw = document.getElementById("communityData").value;
+  const output = document.getElementById("output");
+
+  let communities;
+  try {
+    communities = JSON.parse(raw);
+  } catch (e) {
+    output.innerHTML = "<b>Invalid JSON. Please check your format.</b>";
+    return;
+  }
+
+  const region = analyzeRegion(communities);
+  const suggestion = generateRegionalSuggestions(region);
+
+  const list = region.results.map(r =>
+    `${r.name}: stress=${r.stressScore.toFixed(1)} (${r.level}), shortage=${r.totalShortage.toFixed(1)}, volunteer gap=${r.volunteerGap}`
+  ).join("<br>");
+
+  const criticalList = region.topCritical.length
+    ? region.topCritical.map(r => r.name).join(", ")
+    : "None";
+
+  const strainedList = region.topStrained.length
+    ? region.topStrained.map(r => r.name).join(", ")
+    : "None";
+
+  output.innerHTML = `
+    <div><b>Total Regional Stress:</b> ${region.totalStress.toFixed(1)}</div>
+    <div><b>Average Community Stress:</b> ${region.avgStress.toFixed(1)} (${region.regionLevel})</div>
+    <hr>
+    <div><b>Communities:</b><br>${list}</div>
+    <hr>
+    <div><b>Top Critical Communities:</b> ${criticalList}</div>
+    <div><b>Top Strained Communities:</b> ${strainedList}</div>
+    <hr>
+    <div><b>Regional Suggestion:</b> ${suggestion}</div>
+  `;
+
+  drawGraph(region.results);
+});
+</script>
+
+</body>
+</html>
