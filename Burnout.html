@@ -10,10 +10,10 @@
     font-family: monospace;
     padding: 40px;
   }
-  input {
+  input, select {
     margin: 6px 0;
     padding: 6px;
-    width: 200px;
+    width: 220px;
     background: #11111a;
     border: 1px solid #33334a;
     color: #e0e0ff;
@@ -32,80 +32,208 @@
     background: #11111a;
     border: 1px solid #33334a;
   }
+  canvas {
+    margin-top: 30px;
+    background: #11111a;
+    border: 1px solid #33334a;
+  }
 </style>
 </head>
 <body>
 
-<h2>Burnout Prevention Simulator</h2>
+<h2>Burnout Prevention Simulator — Enhanced Edition</h2>
 
+<!-- BASIC INPUTS -->
 <div>
-  <label>Daily Load (work, stress, obligations):</label><br>
+  <label>Base Daily Load:</label><br>
   <input id="load" type="number" value="60"><br>
 
-  <label>Daily Recovery (sleep, rest, hobbies):</label><br>
+  <label>Base Daily Recovery:</label><br>
   <input id="recovery" type="number" value="40"><br>
 
-  <label>Resilience (baseline capacity):</label><br>
+  <label>Resilience:</label><br>
   <input id="resilience" type="number" value="50"><br>
 
   <label>Days to Simulate:</label><br>
-  <input id="days" type="number" value="30"><br>
-
-  <button id="simulate">Run Simulation</button>
+  <input id="days" type="number" value="60"><br>
 </div>
+
+<hr>
+
+<!-- WEEKLY PATTERNS -->
+<h3>Weekly Pattern</h3>
+<div>
+  <label>Weekday Load Modifier (%):</label><br>
+  <input id="weekdayLoad" type="number" value="10"><br>
+
+  <label>Weekend Recovery Modifier (%):</label><br>
+  <input id="weekendRecovery" type="number" value="20"><br>
+</div>
+
+<hr>
+
+<!-- HABITS -->
+<h3>Habits</h3>
+<div>
+  <label>Extra Sleep (hours):</label><br>
+  <input id="habitSleep" type="number" value="0"><br>
+
+  <label>Meditation (minutes):</label><br>
+  <input id="habitMeditation" type="number" value="0"><br>
+
+  <label>Breaks per Day:</label><br>
+  <input id="habitBreaks" type="number" value="0"><br>
+
+  <label>Social Interactions per Week:</label><br>
+  <input id="habitSocial" type="number" value="0"><br>
+</div>
+
+<hr>
+
+<!-- SCENARIO COMPARISON -->
+<h3>Scenario Comparison</h3>
+<div>
+  <label>Load Reduction (%):</label><br>
+  <input id="scenarioLoad" type="number" value="0"><br>
+
+  <label>Recovery Increase (%):</label><br>
+  <input id="scenarioRecovery" type="number" value="0"><br>
+</div>
+
+<button id="simulate">Run Simulation</button>
 
 <div id="output"></div>
 
+<canvas id="graph" width="800" height="300"></canvas>
+
 <script>
-// ---------------------------------------------
-// BURNOUT SIMULATION ENGINE
-// ---------------------------------------------
+// ------------------------------------------------------
+// HABIT ENGINE
+// ------------------------------------------------------
+function applyHabits(load, recovery, day, habitSleep, habitMeditation, habitBreaks, habitSocial) {
+  recovery += habitSleep * 2;          // sleep strongly boosts recovery
+  recovery += habitMeditation * 0.2;   // meditation adds calm
+  recovery += habitBreaks * 1.5;       // breaks reduce drain
+  if (day % 7 === 0) recovery += habitSocial * 3; // weekly social boost
+  return { load, recovery };
+}
+
+// ------------------------------------------------------
+// WEEKLY PATTERN ENGINE
+// ------------------------------------------------------
+function applyWeeklyPattern(load, recovery, day, weekdayLoad, weekendRecovery) {
+  const dayOfWeek = day % 7;
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+    load += load * (weekdayLoad / 100);
+  } else {
+    recovery += recovery * (weekendRecovery / 100);
+  }
+  return { load, recovery };
+}
+
+// ------------------------------------------------------
+// SCENARIO ENGINE
+// ------------------------------------------------------
+function applyScenario(load, recovery, scenarioLoad, scenarioRecovery) {
+  load -= load * (scenarioLoad / 100);
+  recovery += recovery * (scenarioRecovery / 100);
+  return { load, recovery };
+}
+
+// ------------------------------------------------------
+// MAIN SIMULATION ENGINE
+// ------------------------------------------------------
 function simulateBurnout() {
-  const load = Number(document.getElementById("load").value);
-  const recovery = Number(document.getElementById("recovery").value);
+  const baseLoad = Number(document.getElementById("load").value);
+  const baseRecovery = Number(document.getElementById("recovery").value);
   const resilience = Number(document.getElementById("resilience").value);
   const days = Number(document.getElementById("days").value);
+
+  const weekdayLoad = Number(document.getElementById("weekdayLoad").value);
+  const weekendRecovery = Number(document.getElementById("weekendRecovery").value);
+
+  const habitSleep = Number(document.getElementById("habitSleep").value);
+  const habitMeditation = Number(document.getElementById("habitMeditation").value);
+  const habitBreaks = Number(document.getElementById("habitBreaks").value);
+  const habitSocial = Number(document.getElementById("habitSocial").value);
+
+  const scenarioLoad = Number(document.getElementById("scenarioLoad").value);
+  const scenarioRecovery = Number(document.getElementById("scenarioRecovery").value);
 
   let energyDebt = 0;
   const log = [];
 
   for (let d = 1; d <= days; d++) {
+    let load = baseLoad;
+    let recovery = baseRecovery;
+
+    ({ load, recovery } = applyWeeklyPattern(load, recovery, d, weekdayLoad, weekendRecovery));
+    ({ load, recovery } = applyHabits(load, recovery, d, habitSleep, habitMeditation, habitBreaks, habitSocial));
+    ({ load, recovery } = applyScenario(load, recovery, scenarioLoad, scenarioRecovery));
+
     const dailyDelta = load - recovery;
     energyDebt += dailyDelta;
 
     const burnoutRisk = Math.max(0, Math.min(100, (energyDebt / resilience) * 100));
 
-    log.push({
-      day: d,
-      energyDebt,
-      burnoutRisk
-    });
+    log.push({ day: d, energyDebt, burnoutRisk });
   }
 
   return log;
 }
 
-// ---------------------------------------------
-// RENDER RESULTS
-// ---------------------------------------------
+// ------------------------------------------------------
+// GRAPH RENDERING
+// ------------------------------------------------------
+function drawGraph(data) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "#8888ff";
+  ctx.beginPath();
+
+  data.forEach((point, i) => {
+    const x = (i / data.length) * canvas.width;
+    const y = canvas.height - (point.burnoutRisk / 100) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+
+  ctx.stroke();
+}
+
+// ------------------------------------------------------
+// RECOVERY SUGGESTIONS
+// ------------------------------------------------------
+function generateSuggestions(finalRisk) {
+  if (finalRisk < 25) return "You are stable. Maintain your habits.";
+  if (finalRisk < 50) return "You are strained. Increase sleep or reduce workload.";
+  if (finalRisk < 75) return "You are overloaded. Add breaks, meditation, and weekend recovery.";
+  return "Burnout trajectory. Reduce load immediately and increase recovery.";
+}
+
+// ------------------------------------------------------
+// MAIN BUTTON HANDLER
+// ------------------------------------------------------
 document.getElementById("simulate").addEventListener("click", () => {
   const result = simulateBurnout();
   const output = document.getElementById("output");
 
   const last = result[result.length - 1];
-
-  let riskLabel = "Stable";
-  if (last.burnoutRisk > 25) riskLabel = "Strained";
-  if (last.burnoutRisk > 50) riskLabel = "Overloaded";
-  if (last.burnoutRisk > 75) riskLabel = "Burnout Trajectory";
+  const suggestion = generateSuggestions(last.burnoutRisk);
 
   output.innerHTML = `
     <div><b>Final Energy Debt:</b> ${last.energyDebt.toFixed(2)}</div>
     <div><b>Burnout Risk:</b> ${last.burnoutRisk.toFixed(2)}%</div>
-    <div><b>Status:</b> ${riskLabel}</div>
+    <div><b>Suggestion:</b> ${suggestion}</div>
   `;
+
+  drawGraph(result);
 });
 </script>
 
 </body>
 </html>
+
